@@ -3,8 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm --prefix frontend run build && node -e \"require('fs').cpSync('frontend/dist', 'dist', {recursive: true})\"",
-    "install:frontend": "npm --prefix frontend install",
-    "install:backend": "npm --prefix backend install"
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && node -e \"require('fs').cpSync('frontend/dist', 'dist', {recursive: true})\""
   }
 }
