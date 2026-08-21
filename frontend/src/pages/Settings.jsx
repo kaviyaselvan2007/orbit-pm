@@ -8,9 +8,10 @@ import {
   setStoredApiKey,
   getSelectedModel,
   setSelectedModel,
+  testGeminiConnection,
   GEMINI_MODELS
 } from '../lib/geminiService';
-import { Sparkles, Key, Check, ExternalLink } from 'lucide-react';
+import { Sparkles, Key, Check, ExternalLink, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -29,6 +30,8 @@ export default function Settings() {
   // Gemini state
   const [geminiKey, setGeminiKey] = useState('');
   const [geminiModel, setGeminiModel] = useState('gemini-1.5-flash');
+  const [testingAi, setTestingAi] = useState(false);
+  const [testAiResult, setTestAiResult] = useState(null);
 
   useEffect(() => {
     setGeminiKey(getStoredApiKey());
@@ -39,6 +42,19 @@ export default function Settings() {
     setStoredApiKey(geminiKey);
     setSelectedModel(geminiModel);
     toast('Gemini AI settings saved successfully.');
+  };
+
+  const handleTestGemini = async () => {
+    setTestingAi(true);
+    setTestAiResult(null);
+    try {
+      await testGeminiConnection(geminiKey, geminiModel);
+      setTestAiResult({ success: true, message: 'Connection verified! Gemini API is active and functioning.' });
+    } catch (err) {
+      setTestAiResult({ success: false, message: err.message || 'Connection failed.' });
+    } finally {
+      setTestingAi(false);
+    }
   };
 
   const applySetting = async (field, val, setter) => {
@@ -169,13 +185,33 @@ export default function Settings() {
             <div>
               <label className="block text-[13px] font-semibold mb-1">Gemini API Key</label>
               <div className="max-w-md">
-                <input
-                  type="password"
-                  placeholder="AIzaSy..."
-                  value={geminiKey}
-                  onChange={(e) => setGeminiKey(e.target.value)}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-teal"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="AIzaSy..."
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-teal font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestGemini}
+                    disabled={testingAi || !geminiKey.trim()}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[12.5px] font-semibold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {testingAi ? <RefreshCw size={13} className="animate-spin" /> : 'Test Key'}
+                  </button>
+                </div>
+
+                {testAiResult && (
+                  <div className={`mt-2 p-2.5 rounded-lg text-[12px] flex items-start gap-1.5 ${
+                    testAiResult.success ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
+                  }`}>
+                    {testAiResult.success ? <CheckCircle2 size={15} className="flex-none mt-0.5" /> : <AlertTriangle size={15} className="flex-none mt-0.5" />}
+                    <span>{testAiResult.message}</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between mt-1.5 text-[11.5px]">
                   <a
                     href="https://aistudio.google.com/app/apikey"
@@ -219,7 +255,7 @@ export default function Settings() {
               </div>
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex items-center gap-3">
               <button
                 onClick={saveGeminiSettings}
                 className="px-4 py-2 bg-teal hover:bg-teal-light text-white text-[13px] font-semibold rounded-lg shadow-sm"

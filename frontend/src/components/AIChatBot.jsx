@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles, Bot, X, Send, Trash2, Maximize2, Minimize2,
   Settings as SettingsIcon, Copy, Check, ShieldAlert, Users,
-  FolderKanban, AlertCircle, RefreshCw, Key, HelpCircle, ChevronRight, ExternalLink
+  AlertCircle, RefreshCw, Key, HelpCircle, ChevronRight, ExternalLink,
+  CheckCircle2, AlertTriangle, MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -12,24 +13,24 @@ import {
   setStoredApiKey,
   getSelectedModel,
   setSelectedModel,
+  testGeminiConnection,
   GEMINI_MODELS
 } from '../lib/geminiService';
 
 const SUGGESTIONS = [
-  { label: '🚨 High Risk Projects', prompt: 'Which projects are currently at high risk and why?' },
-  { label: '👥 Team Overload', prompt: 'Are any team members overloaded or logging more than 40 hours?' },
-  { label: '⏳ Delayed Projects', prompt: 'Show me all delayed projects with their progress and clients.' },
-  { label: '📊 Portfolio Health', prompt: 'Give me a comprehensive summary of our overall project portfolio health.' },
-  { label: '💡 Risk Mitigation Plan', prompt: 'What concrete steps should we take to reduce project risk this week?' },
+  { label: '🚨 High Risk Projects', prompt: 'Which projects are currently at high risk and what are the specific reasons?' },
+  { label: '👥 Team Overload', prompt: 'Which employees are overloaded or working more than 40 hours this week?' },
+  { label: '⏳ Delayed Projects', prompt: 'List all delayed projects with their progress percentages and clients.' },
+  { label: '📊 Portfolio Health', prompt: 'Provide an executive summary of our overall project portfolio health.' },
+  { label: '💡 Actionable Mitigation', prompt: 'Give me 3 prioritized action items to reduce portfolio risk this week.' },
 ];
 
 /**
- * Lightweight Markdown & Formatter component for AI responses.
+ * Enhanced Lightweight Markdown & Formatter component for AI responses.
  */
 function MarkdownContent({ content }) {
   if (!content) return null;
 
-  // Split by line breaks to render paragraphs, lists, and headings
   const lines = content.split('\n');
 
   return (
@@ -38,7 +39,7 @@ function MarkdownContent({ content }) {
         const trimmed = line.trim();
 
         if (!trimmed) {
-          return <div key={idx} className="h-1.5" />;
+          return <div key={idx} className="h-1" />;
         }
 
         // Heading 3 / 2 / 1
@@ -51,24 +52,24 @@ function MarkdownContent({ content }) {
         }
         if (trimmed.startsWith('## ')) {
           return (
-            <h3 key={idx} className="font-bold text-[15px] text-slate-900 dark:text-white pt-1.5 border-b border-slate-200 dark:border-navy-700 pb-0.5">
+            <h3 key={idx} className="font-bold text-[14.5px] text-slate-900 dark:text-white pt-1.5 border-b border-slate-200 dark:border-navy-700 pb-0.5">
               {formatInline(trimmed.slice(3))}
             </h3>
           );
         }
         if (trimmed.startsWith('# ')) {
           return (
-            <h2 key={idx} className="font-extrabold text-[16px] text-slate-900 dark:text-white pt-2">
+            <h2 key={idx} className="font-extrabold text-[15.5px] text-slate-900 dark:text-white pt-2">
               {formatInline(trimmed.slice(2))}
             </h2>
           );
         }
 
-        // Bullet point
+        // Bullet points
         if (trimmed.startsWith('* ') || trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
           return (
-            <div key={idx} className="flex items-start gap-2 pl-2">
-              <span className="text-teal font-bold text-base leading-none">•</span>
+            <div key={idx} className="flex items-start gap-2 pl-1.5">
+              <span className="text-teal font-bold text-sm leading-none mt-1">•</span>
               <span className="flex-1">{formatInline(trimmed.slice(2))}</span>
             </div>
           );
@@ -78,7 +79,7 @@ function MarkdownContent({ content }) {
         const numMatch = trimmed.match(/^(\d+)\.\s+(.*)/);
         if (numMatch) {
           return (
-            <div key={idx} className="flex items-start gap-2 pl-2">
+            <div key={idx} className="flex items-start gap-2 pl-1.5">
               <span className="text-teal font-mono font-semibold text-xs pt-0.5">{numMatch[1]}.</span>
               <span className="flex-1">{formatInline(numMatch[2])}</span>
             </div>
@@ -101,25 +102,20 @@ function MarkdownContent({ content }) {
 }
 
 /**
- * Format inline bold, code, and links.
+ * Format inline bold, code, and italics.
  */
 function formatInline(text) {
   if (!text) return '';
 
-  // Regex split for **bold**, `code`, and *italic*
   const parts = [];
   let remaining = text;
   let keyIdx = 0;
 
   while (remaining.length > 0) {
-    // Bold: **text**
     const boldMatch = remaining.match(/\*\*(.*?)\*\*/);
-    // Code: `code`
     const codeMatch = remaining.match(/`([^`]+)`/);
-    // Italic: *text* (single asterisk)
     const italicMatch = remaining.match(/(?<!\*)\*([^*]+)\*(?!\*)/);
 
-    // Find nearest match
     let earliest = null;
     let type = null;
 
@@ -141,12 +137,10 @@ function formatInline(text) {
       break;
     }
 
-    // Push text before match
     if (earliest.index > 0) {
       parts.push(<React.Fragment key={keyIdx++}>{remaining.slice(0, earliest.index)}</React.Fragment>);
     }
 
-    // Push formatted element
     if (type === 'bold') {
       parts.push(
         <strong key={keyIdx++} className="font-semibold text-slate-900 dark:text-white">
@@ -181,7 +175,9 @@ export default function AIChatBot() {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [selectedModelId, setSelectedModelId] = useState(getSelectedModel());
   const [keySavedToast, setKeySavedToast] = useState(false);
-  
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+
   const [messages, setMessages] = useState(() => {
     const saved = sessionStorage.getItem('orbitpm_ai_messages');
     if (saved) {
@@ -195,7 +191,7 @@ export default function AIChatBot() {
       {
         id: 'welcome',
         role: 'assistant',
-        content: `👋 Hello **${user?.name || 'there'}**! I am **OrbitPM AI**, powered by Google Gemini.\n\nI have real-time access to your project portfolio, risk engines, team workloads, and client data. How can I assist you today?`,
+        content: `👋 Hello **${user?.name || 'there'}**! I am your **OrbitPM AI Assistant**, powered by Google Gemini.\n\nI have real-time access to your portfolio projects, risk scores, team workloads, and client analytics. Ask me any question, request recommendations, or draft summaries!`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ];
@@ -209,11 +205,11 @@ export default function AIChatBot() {
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Sync apiKey state with localStorage
+  // Sync state with storage
   useEffect(() => {
     setApiKeyInput(getStoredApiKey());
     setSelectedModelId(getSelectedModel());
-  }, [showSettings]);
+  }, [showSettings, isOpen]);
 
   // Persist messages in session
   useEffect(() => {
@@ -237,6 +233,8 @@ export default function AIChatBot() {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [isOpen, showSettings]);
+
+  const activeApiKey = getStoredApiKey();
 
   const handleSendMessage = async (textToSend) => {
     const messageText = (textToSend || input).trim();
@@ -318,10 +316,21 @@ export default function AIChatBot() {
     setTimeout(() => {
       setKeySavedToast(false);
       setShowSettings(false);
-    }, 1200);
+    }, 1000);
   };
 
-  const activeApiKey = getStoredApiKey();
+  const handleTestKey = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      await testGeminiConnection(apiKeyInput, selectedModelId);
+      setTestResult({ success: true, message: 'Connection successful! Gemini is responding properly.' });
+    } catch (err) {
+      setTestResult({ success: false, message: err.message || 'Connection failed.' });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
@@ -336,7 +345,7 @@ export default function AIChatBot() {
             <X size={13} />
           </button>
           <div className="flex items-center gap-2 font-semibold text-teal dark:text-teal-light mb-1">
-            <Sparkles size={14} className="animate-spin text-amber" />
+            <Sparkles size={14} className="text-amber animate-spin" />
             <span>AI Project Assistant</span>
           </div>
           <p className="text-slate-600 dark:text-slate-300">
@@ -350,31 +359,40 @@ export default function AIChatBot() {
         <div
           className={`bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-700 shadow-2xl rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ease-in-out mb-3 backdrop-blur-xl ${
             isExpanded
-              ? 'w-[92vw] sm:w-[580px] h-[80vh] max-h-[760px]'
-              : 'w-[92vw] sm:w-[420px] h-[540px] max-h-[85vh]'
+              ? 'w-[94vw] sm:w-[600px] h-[82vh] max-h-[780px]'
+              : 'w-[94vw] sm:w-[430px] h-[550px] max-h-[85vh]'
           }`}
           style={{ boxShadow: '0 20px 50px rgba(0,0,0,0.22)' }}
         >
           {/* Header */}
-          <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-teal/90 text-white px-4 py-3.5 flex items-center justify-between border-b border-navy-800">
+          <div className="bg-gradient-to-r from-navy-950 via-navy-900 to-teal/90 text-white px-4 py-3 flex items-center justify-between border-b border-navy-800">
             <div className="flex items-center gap-2.5">
               <div className="relative">
                 <div className="w-8 h-8 rounded-xl bg-teal/30 border border-teal-light/40 flex items-center justify-center text-teal-light">
                   <Bot size={19} />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green border-2 border-navy-950"></span>
+                <span className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-navy-950 ${activeApiKey ? 'bg-green' : 'bg-amber'}`}></span>
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-[14.5px] tracking-tight">OrbitPM AI</h3>
-                  <span className="px-1.5 py-0.2 bg-teal/40 text-teal-light border border-teal-light/30 rounded text-[10px] font-mono uppercase font-semibold">
-                    Gemini
+                  <h3 className="font-bold text-[14px] tracking-tight">OrbitPM AI</h3>
+                  <span className="px-1.5 py-0.2 bg-teal/40 text-teal-light border border-teal-light/30 rounded text-[9.5px] font-mono uppercase font-semibold">
+                    {selectedModelId.replace('gemini-', '')}
                   </span>
                 </div>
-                <p className="text-[11px] text-slate-300 flex items-center gap-1">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-green animate-pulse"></span>
-                  Portfolio Grounded
-                </p>
+                <div className="text-[10.5px] text-slate-300 flex items-center gap-1">
+                  {activeApiKey ? (
+                    <span className="text-green-300 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-green animate-pulse"></span>
+                      Gemini Live Grounded
+                    </span>
+                  ) : (
+                    <span className="text-amber-300 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber"></span>
+                      Local Intelligence Mode
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -416,22 +434,42 @@ export default function AIChatBot() {
           {/* Settings Drawer / Overlay */}
           {showSettings ? (
             <div className="p-4 bg-slate-50 dark:bg-navy-950 flex-1 overflow-y-auto flex flex-col justify-between">
-              <form onSubmit={handleSaveSettings} className="space-y-4">
+              <form onSubmit={handleSaveSettings} className="space-y-3.5">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <Key size={16} className="text-teal" />
-                    <h4 className="font-semibold text-[14px] text-slate-900 dark:text-white">Google Gemini API Key</h4>
+                    <h4 className="font-semibold text-[13.5px] text-slate-900 dark:text-white">Google Gemini API Key</h4>
                   </div>
                   <p className="text-[12px] text-slate-500 dark:text-slate-400 mb-2">
-                    Enter your Gemini API key to enable full AI reasoning. If left empty, local intelligence mode will run.
+                    Enter your Gemini API key to enable generative reasoning. If left empty, local intelligence mode runs.
                   </p>
-                  <input
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full text-[13px] px-3 py-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 text-slate-900 dark:text-white focus:outline-none focus:border-teal"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="password"
+                      value={apiKeyInput}
+                      onChange={(e) => setApiKeyInput(e.target.value)}
+                      placeholder="Paste AIzaSy... key here"
+                      className="flex-1 text-[13px] px-3 py-2 rounded-lg border border-slate-300 dark:border-navy-700 bg-white dark:bg-navy-900 text-slate-900 dark:text-white focus:outline-none focus:border-teal font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTestKey}
+                      disabled={testingConnection || !apiKeyInput.trim()}
+                      className="px-3 py-2 bg-slate-200 dark:bg-navy-800 hover:bg-slate-300 dark:hover:bg-navy-700 text-slate-700 dark:text-slate-200 text-[12px] font-semibold rounded-lg transition-all flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {testingConnection ? <RefreshCw size={13} className="animate-spin" /> : 'Test'}
+                    </button>
+                  </div>
+
+                  {testResult && (
+                    <div className={`mt-2 p-2 rounded-lg text-[12px] flex items-start gap-1.5 ${
+                      testResult.success ? 'bg-green/10 text-green border border-green/20' : 'bg-red/10 text-red border border-red/20'
+                    }`}>
+                      {testResult.success ? <CheckCircle2 size={15} className="flex-none mt-0.5" /> : <AlertTriangle size={15} className="flex-none mt-0.5" />}
+                      <span>{testResult.message}</span>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-between mt-1.5">
                     <a
                       href="https://aistudio.google.com/app/apikey"
@@ -453,13 +491,13 @@ export default function AIChatBot() {
 
                 <div>
                   <label className="block text-[13px] font-semibold text-slate-900 dark:text-white mb-1">
-                    Gemini Model Provider
+                    Gemini Model
                   </label>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {GEMINI_MODELS.map((model) => (
                       <label
                         key={model.id}
-                        className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer text-[12.5px] transition-all ${
+                        className={`flex items-center gap-2.5 p-2 rounded-lg border cursor-pointer text-[12px] transition-all ${
                           selectedModelId === model.id
                             ? 'border-teal bg-teal/5 dark:bg-teal/10 font-semibold text-slate-900 dark:text-white'
                             : 'border-slate-200 dark:border-navy-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
@@ -491,13 +529,13 @@ export default function AIChatBot() {
                     onClick={() => setShowSettings(false)}
                     className="px-3.5 py-2 border border-slate-300 dark:border-navy-700 hover:bg-slate-100 dark:hover:bg-navy-800 text-slate-700 dark:text-slate-300 text-[13px] rounded-lg transition-all"
                   >
-                    Cancel
+                    Close
                   </button>
                 </div>
               </form>
 
-              <div className="mt-4 p-3 bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-800 rounded-xl text-[11.5px] text-slate-500 dark:text-slate-400">
-                🔒 <strong>Privacy Note:</strong> Your API key is stored locally in your browser session/storage and sent directly to Google Gemini's secure API.
+              <div className="mt-3 p-2.5 bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-800 rounded-xl text-[11px] text-slate-500 dark:text-slate-400">
+                🔒 <strong>Zero Server Storage:</strong> Your Gemini API key is kept safely in your local browser and sent directly to Google Gemini.
               </div>
             </div>
           ) : (
@@ -518,7 +556,7 @@ export default function AIChatBot() {
                     )}
 
                     <div
-                      className={`relative group max-w-[84%] sm:max-w-[80%] rounded-2xl px-3.5 py-2.5 shadow-sm ${
+                      className={`relative group max-w-[86%] sm:max-w-[82%] rounded-2xl px-3.5 py-2.5 shadow-sm ${
                         isAssistant
                           ? 'bg-white dark:bg-navy-900 border border-slate-200/80 dark:border-navy-800 text-slate-800 dark:text-slate-100 rounded-tl-sm'
                           : 'bg-gradient-to-r from-teal to-teal-light text-white rounded-tr-sm'
@@ -528,7 +566,7 @@ export default function AIChatBot() {
 
                       {/* Footer info: timestamp & copy button */}
                       <div
-                        className={`flex items-center justify-between gap-2 mt-1 pt-1 text-[10.5px] ${
+                        className={`flex items-center justify-between gap-2 mt-1 pt-1 text-[10px] ${
                           isAssistant
                             ? 'text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-navy-800'
                             : 'text-white/70'
@@ -571,7 +609,7 @@ export default function AIChatBot() {
                   </div>
                   <div className="bg-white dark:bg-navy-900 border border-slate-200 dark:border-navy-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm flex items-center gap-2">
                     <span className="text-[12.5px] text-slate-500 dark:text-slate-400 font-medium">
-                      Gemini is analyzing portfolio...
+                      Gemini is generating response...
                     </span>
                     <div className="flex gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-teal animate-bounce [animation-delay:-0.3s]"></span>
@@ -614,7 +652,7 @@ export default function AIChatBot() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask OrbitPM AI anything about projects, risk, workloads..."
+                  placeholder="Ask anything about projects, risk analysis, team workloads..."
                   rows={1}
                   className="flex-1 bg-transparent resize-none outline-none text-[13px] px-2 py-1 max-h-24 min-h-[36px] text-slate-800 dark:text-slate-100 placeholder-slate-400"
                 />
@@ -658,7 +696,6 @@ export default function AIChatBot() {
         }}
         aria-label="OrbitPM AI Chatbot Launcher"
       >
-        {/* Pulsing ring when closed */}
         {!isOpen && (
           <span className="absolute inset-0 rounded-full bg-teal-light opacity-35 animate-ping -z-10"></span>
         )}

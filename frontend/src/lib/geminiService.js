@@ -13,11 +13,19 @@ export const GEMINI_MODELS = [
 ];
 
 export function getStoredApiKey() {
-  return localStorage.getItem(STORAGE_KEY) || import.meta.env.VITE_GEMINI_API_KEY || '';
+  const localKey = localStorage.getItem(STORAGE_KEY);
+  if (localKey && localKey.trim()) {
+    return localKey.trim();
+  }
+  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (envKey && envKey.trim()) {
+    return envKey.trim();
+  }
+  return '';
 }
 
 export function setStoredApiKey(key) {
-  if (key) {
+  if (key && key.trim()) {
     localStorage.setItem(STORAGE_KEY, key.trim());
   } else {
     localStorage.removeItem(STORAGE_KEY);
@@ -30,6 +38,54 @@ export function getSelectedModel() {
 
 export function setSelectedModel(modelId) {
   localStorage.setItem(MODEL_STORAGE_KEY, modelId);
+}
+
+/**
+ * Clean and format chat messages for Google Gemini API.
+ * Rules enforced by Gemini API:
+ * 1. contents[0] MUST be role: "user" (no leading model/assistant messages).
+ * 2. Roles must strictly alternate between "user" and "model".
+ * 3. The final message must be role: "user".
+ */
+export function formatMessagesForGemini(messages) {
+  const formatted = [];
+  let lastRole = null;
+
+  // Find the first message sent by a user
+  const firstUserIdx = messages.findIndex(m => m.role === 'user');
+  if (firstUserIdx === -1) {
+    return [{ role: 'user', parts: [{ text: 'Hello! How can you help me with project management?' }] }];
+  }
+
+  const validMessages = messages.slice(firstUserIdx);
+
+  for (const msg of validMessages) {
+    const role = (msg.role === 'assistant' || msg.role === 'model') ? 'model' : 'user';
+    const text = (msg.content || '').trim();
+    if (!text) continue;
+
+    // Merge consecutive same-role messages
+    if (role === lastRole && formatted.length > 0) {
+      formatted[formatted.length - 1].parts[0].text += `\n\n${text}`;
+    } else {
+      formatted.push({
+        role,
+        parts: [{ text }],
+      });
+      lastRole = role;
+    }
+  }
+
+  // Ensure last message is from user
+  if (formatted.length > 0 && formatted[formatted.length - 1].role !== 'user') {
+    formatted.pop();
+  }
+
+  if (formatted.length === 0) {
+    formatted.push({ role: 'user', parts: [{ text: 'Hello!' }] });
+  }
+
+  return formatted;
 }
 
 /**
@@ -54,17 +110,21 @@ export async function getLiveWorkspaceContext(currentUser) {
     const overloadedEmployees = employees.filter(e => e.workload === 'Overloaded' || (e.weekly_hours || 0) > 40);
 
     const contextSummary = `
-CURRENT LIVE SYSTEM DATA:
-- Current User: ${currentUser?.name || 'User'} (Role: ${currentUser?.role || 'Employee'})
-- Total Projects: ${projects.length}
-- Delayed Projects (${delayedProjects.length}): ${delayedProjects.map(p => `${p.name} (${p.progress || 0}%, Client: ${p.client_name || 'N/A'})`).join('; ') || 'None'}
-- High Risk Projects (${highRiskProjects.length}): ${highRiskProjects.map(p => `${p.name} [Score: ${p.risk?.score}/100, Reason: ${p.risk?.reasons?.join(', ') || 'N/A'}]`).join('; ') || 'None'}
-- Medium Risk Projects (${mediumRiskProjects.length}): ${mediumRiskProjects.map(p => `${p.name} [Score: ${p.risk?.score}/100]`).join('; ') || 'None'}
-- Overloaded Staff (${overloadedEmployees.length}): ${overloadedEmployees.map(e => `${e.name} (${e.weekly_hours || 0}h/wk, ${e.designation || 'Staff'}, Score: ${e.productivity_score || 0}%)`).join('; ') || 'None'}
+LIVE PORTFOLIO & WORKSPACE DATA:
+- Current Logged-in User: ${currentUser?.name || 'User'} (Role: ${currentUser?.role || 'Employee'})
+- Total Active Projects: ${projects.length}
+- Delayed Projects (${delayedProjects.length}): ${delayedProjects.map(p => `${p.name} (Code: ${p.project_code || 'N/A'}, Progress: ${p.progress || 0}%, Client: ${p.client_name || 'N/A'})`).join('; ') || 'None'}
+- High Risk Projects (${highRiskProjects.length}): ${highRiskProjects.map(p => `${p.name} [Risk Score: ${p.risk?.score}/100, Primary Factor: ${p.risk?.reasons?.join(', ') || 'High Risk'}]`).join('; ') || 'None'}
+- Medium Risk Projects (${mediumRiskProjects.length}): ${mediumRiskProjects.map(p => `${p.name} [Risk Score: ${p.risk?.score}/100]`).join('; ') || 'None'}
+- Overloaded Team Members (${overloadedEmployees.length}): ${overloadedEmployees.map(e => `${e.name} (${e.weekly_hours || 0}h/wk, ${e.designation || 'Staff'}, Productivity: ${e.productivity_score || 0}%)`).join('; ') || 'None'}
 - Total Employees: ${employees.length}
 - Total Clients: ${clients.length}
-- Key Projects Summary:
-${projects.slice(0, 10).map(p => `  • ${p.name} (${p.project_code || 'N/A'}): Status=${p.status || 'Active'}, Progress=${p.progress || 0}%, Budget=$${p.budget || 0}, Client=${p.client_name || 'N/A'}`).join('\n')}
+
+DETAILED PROJECT LIST:
+${projects.map(p => `• [${p.project_code || 'N/A'}] ${p.name} | Status: ${p.status || 'Active'} | Progress: ${p.progress || 0}% | Budget: $${p.budget || 0} | Client: ${p.client_name || 'N/A'}`).join('\n')}
+
+DETAILED TEAM MEMBERS:
+${employees.map(e => `• ${e.name} (${e.emp_code || 'N/A'}) - ${e.designation || 'Staff'}, Dept: ${e.department || 'General'}, Hours: ${e.weekly_hours || 0}h/wk, Status: ${e.workload || 'Balanced'}`).join('\n')}
     `.trim();
 
     return {
@@ -75,9 +135,39 @@ ${projects.slice(0, 10).map(p => `  • ${p.name} (${p.project_code || 'N/A'}): 
     console.warn('Could not fetch live workspace context for AI:', err);
     return {
       raw: { projects: [], employees: [], clients: [], projectsWithRisk: [] },
-      contextSummary: 'Live workspace data currently unavailable.',
+      contextSummary: 'Live workspace database snapshot currently unavailable.',
     };
   }
+}
+
+/**
+ * Test Gemini API connection with a given key.
+ */
+export async function testGeminiConnection(keyToTest, modelId) {
+  const apiKey = (keyToTest || getStoredApiKey()).trim();
+  const selectedModel = modelId || getSelectedModel();
+
+  if (!apiKey) {
+    throw new Error('API key is empty. Please enter your Google Gemini API key.');
+  }
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: 'Hello, respond with the single word "CONNECTED".' }] }],
+      generationConfig: { maxOutputTokens: 10 },
+    }),
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}));
+    throw new Error(errData.error?.message || `HTTP ${response.status} ${response.statusText}`);
+  }
+
+  return true;
 }
 
 /**
@@ -89,52 +179,38 @@ export async function sendGeminiMessage({
   customApiKey = null,
   model = null,
 }) {
-  const apiKey = customApiKey || getStoredApiKey();
+  const apiKey = (customApiKey || getStoredApiKey()).trim();
   const selectedModel = model || getSelectedModel();
 
   // Load live data for context grounding
   const { raw, contextSummary } = await getLiveWorkspaceContext(currentUser);
 
-  // If no API Key is provided, use the smart local fallback
+  // If no API Key is provided, use the local intelligent fallback
   if (!apiKey) {
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
     const fallbackReply = fallbackAnswer(lastUserMessage, raw);
     
     return {
-      text: `${fallbackReply}\n\n*(Tip: Add your Google Gemini API key in the chat settings ⚙️ above to unlock full generative AI insights and natural conversations!)*`,
+      text: `${fallbackReply}\n\n*(Note: Running in Local Intelligence Mode. Add your Gemini API key in ⚙️ Settings to unlock full generative reasoning & free-form chat!)*`,
       isFallback: true,
     };
   }
 
   const systemInstructionText = `
-You are "OrbitPM AI Assistant", an advanced, friendly, and expert Project Management & Risk Analyst embedded inside the ORBITPM enterprise platform.
-Your mission is to help project managers, executives, and team members analyze project health, mitigate timeline/budget risks, optimize employee workload, and answer platform queries.
+You are "OrbitPM AI Assistant", a world-class AI Project Management & Risk Analyst deeply integrated into the OrbitPM platform.
+You are sharp, highly intelligent, articulate, and empathetic. You can discuss any project management topic, analyze risks, suggest mitigation roadmaps, draft emails/tickets, optimize resource distribution, and give executive-level portfolio summaries.
 
-GUIDELINES:
-1. Ground your answers using the live data provided below whenever relevant.
-2. If asked about delayed projects, high risk items, or team workload, cite specific names, percentages, and actionable mitigation advice.
-3. Be concise, structured, and professional. Use markdown formatting (bullet points, bold text, concise tables if helpful).
-4. If a question is outside the scope of OrbitPM or general project management, answer politely and offer helpful PM tips.
-5. Address the user respectfully. Current user is ${currentUser?.name || 'User'} with role "${currentUser?.role || 'Employee'}".
+CORE RESPONSIBILITIES:
+1. When asked about specific projects, deadlines, workloads, or risks, refer directly to the live portfolio data below.
+2. Provide actionable, insightful, and well-structured answers using clear Markdown (bullet points, bold key terms, mini-tables if helpful).
+3. If asked general software engineering, agile, or productivity questions, answer with deep technical and managerial expertise.
+4. Address the user respectfully as ${currentUser?.name || 'User'} (${currentUser?.role || 'Team Member'}).
 
 ${contextSummary}
   `.trim();
 
-  // Format messages into Gemini's contents format
-  const contents = messages
-    .filter(m => m.role === 'user' || m.role === 'assistant' || m.role === 'model')
-    .map(m => ({
-      role: m.role === 'assistant' ? 'model' : m.role,
-      parts: [{ text: m.content }],
-    }));
-
-  // Ensure there is at least one content part
-  if (contents.length === 0) {
-    contents.push({
-      role: 'user',
-      parts: [{ text: 'Hello! What can you help me with?' }],
-    });
-  }
+  // Properly sanitize and format contents for Gemini API (user starts, alternating roles)
+  const contents = formatMessagesForGemini(messages);
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
@@ -150,9 +226,9 @@ ${contextSummary}
         },
         contents,
         generationConfig: {
-          temperature: 0.65,
+          temperature: 0.7,
           topP: 0.95,
-          maxOutputTokens: 1200,
+          maxOutputTokens: 1500,
         },
       }),
     });
@@ -161,11 +237,8 @@ ${contextSummary}
       const errData = await response.json().catch(() => ({}));
       const errMsg = errData.error?.message || `HTTP ${response.status} ${response.statusText}`;
       
-      // If quota or invalid key, throw descriptive error
-      if (response.status === 400 || response.status === 403) {
-        throw new Error(`Gemini API Error: ${errMsg}. Please verify your API key in Settings.`);
-      }
-      throw new Error(`Gemini Error: ${errMsg}`);
+      console.error('Gemini API Error Response:', errData);
+      throw new Error(`Gemini API Error: ${errMsg}`);
     }
 
     const data = await response.json();
@@ -177,14 +250,14 @@ ${contextSummary}
       isFallback: false,
     };
   } catch (error) {
-    console.error('Gemini API call error:', error);
+    console.error('Gemini call failed:', error);
     
-    // Graceful fallback to local engine on network/key failure
+    // Provide a clear explanation of what went wrong rather than masking it as local rules
     const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
     const fallbackReply = fallbackAnswer(lastUserMessage, raw);
 
     return {
-      text: `⚠️ **Gemini Service Notice**: ${error.message}\n\n**Local Analysis Result:**\n${fallbackReply}`,
+      text: `⚠️ **Gemini Connection Issue**: ${error.message}\n\n**Local Analysis Fallback:**\n${fallbackReply}\n\n*Please check your Gemini API key in ⚙️ Settings or verify your Google AI Studio quota.*`,
       isFallback: true,
       error: error.message,
     };
