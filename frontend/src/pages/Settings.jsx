@@ -1,10 +1,16 @@
-// src/pages/Settings.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { toast } from '../components/UI';
 import Modal from '../components/Modal';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-
+import {
+  getStoredApiKey,
+  setStoredApiKey,
+  getSelectedModel,
+  setSelectedModel,
+  GEMINI_MODELS
+} from '../lib/geminiService';
+import { Sparkles, Key, Check, ExternalLink } from 'lucide-react';
 
 export default function Settings() {
   const { user, updateUser } = useAuth();
@@ -19,6 +25,21 @@ export default function Settings() {
   const [loginAlerts, setLoginAlerts] = useState(user?.login_alerts !== false);
   const [pwOpen, setPwOpen] = useState(false);
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirm: '' });
+
+  // Gemini state
+  const [geminiKey, setGeminiKey] = useState('');
+  const [geminiModel, setGeminiModel] = useState('gemini-1.5-flash');
+
+  useEffect(() => {
+    setGeminiKey(getStoredApiKey());
+    setGeminiModel(getSelectedModel());
+  }, []);
+
+  const saveGeminiSettings = () => {
+    setStoredApiKey(geminiKey);
+    setSelectedModel(geminiModel);
+    toast('Gemini AI settings saved successfully.');
+  };
 
   const applySetting = async (field, val, setter) => {
     setter(val);
@@ -101,7 +122,12 @@ export default function Settings() {
       <p className="text-[12.5px] text-slate-500 mb-4">Application, notification and security preferences</p>
 
       <div className="flex gap-1 border-b border-slate-200 mb-4.5 mb-4">
-        {[['pref', 'Preferences'], ['notif', 'Notifications'], ['sec', 'Security']].map(([k, label]) => (
+        {[
+          ['pref', 'Preferences'],
+          ['ai', 'AI Assistant (Gemini)'],
+          ['notif', 'Notifications'],
+          ['sec', 'Security']
+        ].map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
             className={`px-4 py-2.5 text-[13.5px] font-semibold border-b-2 ${tab === k ? 'text-teal border-teal' : 'text-slate-500 border-transparent'}`}>
             {label}
@@ -124,6 +150,84 @@ export default function Settings() {
               <option value="French">French</option>
             </select>
           </Row>
+        </div>
+      )}
+
+      {tab === 'ai' && (
+        <div className="bg-white border border-slate-200 rounded-[10px] p-5 shadow-sm space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Sparkles className="text-teal" size={18} />
+              <h3 className="font-semibold text-[14px]">Google Gemini Provider Configuration</h3>
+            </div>
+            <p className="text-[12.5px] text-slate-500">
+              Configure the Gemini AI model and API credentials powering the bottom-right OrbitPM chat widget.
+            </p>
+          </div>
+
+          <div className="border-t border-slate-100 pt-4 space-y-4">
+            <div>
+              <label className="block text-[13px] font-semibold mb-1">Gemini API Key</label>
+              <div className="max-w-md">
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] focus:outline-none focus:border-teal"
+                />
+                <div className="flex items-center justify-between mt-1.5 text-[11.5px]">
+                  <a
+                    href="https://aistudio.google.com/app/apikey"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-teal hover:underline flex items-center gap-1"
+                  >
+                    Get a Google Gemini API Key <ExternalLink size={11} />
+                  </a>
+                  {geminiKey ? (
+                    <span className="text-green font-medium flex items-center gap-1">
+                      <Check size={12} /> Active
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">Not configured (uses local assistant mode)</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[13px] font-semibold mb-1.5">Model Engine</label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-w-xl">
+                {GEMINI_MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setGeminiModel(m.id)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      geminiModel === m.id
+                        ? 'border-teal bg-teal/5 font-semibold text-teal'
+                        : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="text-[13px]">{m.name.split(' (')[0]}</div>
+                    <div className="text-[11px] text-slate-500 font-normal mt-0.5">
+                      {m.name.includes('(') ? m.name.split('(')[1].replace(')', '') : ''}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={saveGeminiSettings}
+                className="px-4 py-2 bg-teal hover:bg-teal-light text-white text-[13px] font-semibold rounded-lg shadow-sm"
+              >
+                Save Gemini Settings
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
