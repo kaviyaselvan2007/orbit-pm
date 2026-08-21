@@ -29,7 +29,7 @@ export default function Settings() {
 
   // Gemini state
   const [geminiKey, setGeminiKey] = useState('');
-  const [geminiModel, setGeminiModel] = useState('gemini-1.5-flash');
+  const [geminiModel, setGeminiModel] = useState('gemini-2.5-flash');
   const [testingAi, setTestingAi] = useState(false);
   const [testAiResult, setTestAiResult] = useState(null);
 
