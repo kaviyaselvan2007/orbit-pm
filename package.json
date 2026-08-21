@@ -1,0 +1,10 @@
+{
+  "name": "axiomate-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend run build",
+    "install:frontend": "npm --prefix frontend install",
+    "install:backend": "npm --prefix backend install"
+  }
+}
