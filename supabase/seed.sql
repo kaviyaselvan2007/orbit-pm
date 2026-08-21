@@ -1,0 +1,3 @@
+-- supabase/seed.sql
+-- Seed script for clean database startup.
+-- No dummy data is seeded.

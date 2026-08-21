@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body { font-family: 'Inter', sans-serif; background: #F5F7FA; color: #1B2436; }
+.font-display { font-family: 'Space Grotesk', sans-serif; }
+.font-mono-plex { font-family: 'IBM Plex Mono', monospace; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #D8DEE9; border-radius: 8px; }
+
+.notif-scroll { scroll-snap-type: x mandatory; }
+.notif-scroll > * { scroll-snap-align: start; }
+
+/* ==========================================================================
+   Dark Mode Premium Theme Overrides
+   ========================================================================== */
+html.dark, html.dark body {
+  background-color: #0B1420 !important;
+  color: #F8FAFC;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #2D3F58;
+}
+
+/* Overriding tailwind color utility classes in dark mode */
+html.dark .bg-white {
+  background-color: #101B2D !important;
+  color: #F8FAFC !important;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #16233A !important;
+}
+
+html.dark .hover\:bg-slate-50:hover {
+  background-color: #16233A !important;
+}
+
+html.dark .hover\:bg-slate-100:hover {
+  background-color: #1E2E4A !important;
+}
+
+html.dark .border-slate-100 {
+  border-color: #16233A !important;
+}
+
+html.dark .border-slate-200 {
+  border-color: #1E2E4A !important;
+}
+
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1E2E4A !important;
+}
+
+html.dark .text-slate-900 {
+  color: #F8FAFC !important;
+}
+
+html.dark .text-slate-800 {
+  color: #F1F5F9 !important;
+}
+
+html.dark .text-slate-700 {
+  color: #E2E8F0 !important;
+}
+
+html.dark .text-slate-600 {
+  color: #CBD5E1 !important;
+}
+
+html.dark .text-slate-500 {
+  color: #94A3B8 !important;
+}
+
+html.dark .text-slate-400 {
+  color: #64748B !important;
+}
+
+/* Modals */
+html.dark .modal-bg {
+  background-color: #101B2D !important;
+}
+
+/* Form controls & inputs */
+html.dark input, 
+html.dark select, 
+html.dark textarea {
+  background-color: #16233A !important;
+  color: #F8FAFC !important;
+  border-color: #1E2E4A !important;
+}
+
+html.dark input:disabled, 
+html.dark select:disabled {
+  background-color: #0B1420 !important;
+  color: #64748B !important;
+}
+
+html.dark input::placeholder {
+  color: #475569 !important;
+}
+
+/* Custom UI settings page and tables */
+html.dark tr.border-b {
+  border-bottom-color: #1E2E4A !important;
+}
+
+html.dark th {
+  background-color: #16233A !important;
+  color: #E2E8F0 !important;
+}
+
+html.dark tr:hover {
+  background-color: #16233A !important;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #2D3F58 !important;
+}
+
+html.dark .bg-slate-300 {
+  background-color: #3B4D68 !important;
+}
+
+html.dark .border-slate-300 {
+  border-color: #2D3F58 !important;
+}
+
+html.dark .text-slate-300 {
+  color: #CBD5E1 !important;
+}
+
+
