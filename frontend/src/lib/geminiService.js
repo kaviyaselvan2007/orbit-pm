@@ -7,9 +7,10 @@ const STORAGE_KEY = 'orbitpm_gemini_api_key';
 const MODEL_STORAGE_KEY = 'orbitpm_gemini_model';
 
 export const GEMINI_MODELS = [
-  { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Default & Recommended)' },
-  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash (Next-Gen)' },
-  { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro (Deep Reasoning)' },
+  { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash (Default & Recommended)' },
+  { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash (Next-Gen)' },
+  { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+  { id: 'gemini-3.6-pro', name: 'Gemini 3.6 Pro (Deep Reasoning)' },
 ];
 
 export function getStoredApiKey() {
@@ -33,7 +34,12 @@ export function setStoredApiKey(key) {
 }
 
 export function getSelectedModel() {
-  return localStorage.getItem(MODEL_STORAGE_KEY) || 'gemini-2.5-flash';
+  const saved = localStorage.getItem(MODEL_STORAGE_KEY);
+  // Auto-migrate legacy or deprecated models
+  if (!saved || saved.includes('1.5') || saved.includes('2.5')) {
+    return 'gemini-3.6-flash';
+  }
+  return saved;
 }
 
 export function setSelectedModel(modelId) {
